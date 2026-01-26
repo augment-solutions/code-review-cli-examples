@@ -1,0 +1,25 @@
+augment-pr-review:
+  stage: test
+  image: node:22-alpine
+  variables:
+    GIT_DEPTH: 1
+  script:
+    - npm install -g @augmentcode/auggie
+    - |
+      auggie mcp add bitbucket \
+                --command npx \
+                --args "-y @zereight/mcp-gitlab" \
+                --env GITLAB_API_URL="https://gitlab.com/api/v4" \
+                --env GITLAB_PERSONAL_ACCESS_TOKEN="$GITLAB_ACCESS_TOKEN" \
+                --env GITLAB_PROJECT_ID="$CI_MERGE_REQUEST_PROJECT_ID"
+    - |
+      AUGGIE_PROMPT="1. PR title: ${CI_MERGE_REQUEST_TITLE}; PR Description: ${CI_MERGE_REQUEST_DESCRIPTION}
+                2. Get the diff for the PR with Project ID ${CI_MERGE_REQUEST_PROJECT_ID} and Merge Request IID {CI_MERGE_REQUEST_IID} using the tool \`get_merge_request_diffs\`.
+                3. Perform a code review using the title, description and diff from steps 1 & 2.
+                4. Post a comment to the PR from step 2 with the summary (how many suggestions are found), and an individual comment in markdown format for each suggestion found during the code review. Use the tool \`create_merge_request_note\` to post the comments.
+                For steps 2 and 4, use the indicated tools. Do not use \`web-fetch\` to Gitlab."
+    - auggie --model code-review --print "$AUGGIE_PROMPT" > review.md
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: always
+
