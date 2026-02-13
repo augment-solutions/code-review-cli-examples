@@ -17,17 +17,15 @@ Before running any pipelines, you must ensure your Bitbucket workspace or reposi
 
 ### 2. Retrieve your Auggie Token
 
-[Install Auggie locally](https://docs.augmentcode.com/cli/setup-auggie/install-auggie-cli) first, if needed. And run the following commands on your *local* machine:
+Create an [Augment Service Account](https://docs.augmentcode.com/cli/automation/service-accounts) that will be used for authenticating to Augment in the Code Review Pipeline. Service accounts are recommended as they are not tied to individual user accounts. Note that service accounts are only available to Enterprise plan customers and *can only be managed by the Administrator* of the Enterprise Plan.
 
-```shell
-# Log in if you haven't already
-auggie login
+To create one:
+* Navigate to: https://app.augmentcode.com/settings/service-accounts
+* Click the `New service account` button, and enter a name (e.g. Augment Code Review) and an optional description.
+* Click the `Add API token` button, and enter a name (e.g. GitLab).
+* Copy the generated token by clicking the `Copy Token` button.
 
-# Print your session token
-auggie tokens print
-```
-
-*Copy the output token string for step 4\.*
+*Alternatively, you can use a personal token by running `auggie login` followed by `auggie tokens print` on your local machine.*
 
 ### 3. Create an Access Token in Bitbucket
 

@@ -4,31 +4,19 @@ This guide walks you through how to set up the **Auggie CLI** with Azure DevOps 
 
 ![Azure DevOps Code Review Screenshot](./screenshot.png)
 
-## Get the Auggie Authentication Token
+## Generate an Augment Token
 
-On your local machine (not in Azure):
+Create an [Augment Service Account](https://docs.augmentcode.com/cli/automation/service-accounts) that will be used for authenticating to Augment in the Code Review Pipeline. Service accounts are recommended as they are not tied to individual user accounts. Note that service accounts are only available to Enterprise plan customers and *can only be managed by the Administrator* of the Enterprise Plan.
 
-1. **Install Auggie CLI** (if you haven't already):
-```shell
-npm install -g @augmentcode/auggie
-```
+To create one:
+* Navigate to: https://app.augmentcode.com/settings/service-accounts
+* Click the `New service account` button, and enter a name (e.g. Augment Code Review) and an optional description.
+* Click the `Add API token` button, and enter a name (e.g. GitLab).
+* Copy the generated token by clicking the `Copy Token` button. This will be used later when defining the Pipeline Variables in Azure DevOps.
 
-2. **Log in to Auggie**:
-```shell
-auggie login
-```
+*Alternatively, you can use a personal token by running `auggie login` followed by `auggie tokens print` on your local machine.*
 
-3. **Print your authentication token**:
-```shell
-auggie tokens print
-```
-
-4. **Copy the token string** that the command prints. This exact value will be stored in Azure DevOps as `AUGMENT_SESSION_AUTH`.
-   * **Do NOT** wrap it in quotes  
-   * **Do NOT** commit it to git  
-   * Keep it secure
-
-**Add the Pipeline YAML to Your Repository**
+## Add the Pipeline YAML to Your Repository
 
 1. In your repository, create a file named `azure-pipelines.yml` at the root (or use any name you prefer).
 2. Paste the complete pipeline YAML content into that file.
