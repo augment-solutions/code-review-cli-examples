@@ -1,25 +1,52 @@
+# GitLab Code Review CI/CD Configuration
+# This configuration provides AI-powered code review for merge requests
+# using Augment Code's auggie CLI tool.
+#
+# SETUP INSTRUCTIONS:
+# 1. Copy this file to your repository root as .gitlab-ci.yml (or include it)
+# 2. Copy pr-review.md to .augment/prompts/pr-review.md
+# 3. Configure the required CI/CD variables (see README.md)
+
+stages:
+  - review
+
+# AI-Powered Merge Request Review
+# Automatically reviews MRs and posts summary comments with inline feedback
 augment-pr-review:
-  stage: test
-  image: node:22-alpine
-  variables:
-    GIT_DEPTH: 1
-  script:
+  stage: review
+  image: node:22
+  before_script:
     - npm install -g @augmentcode/auggie
+    - auggie --version
+  script:
     - |
-      auggie mcp add bitbucket \
-                --command npx \
-                --args "-y @zereight/mcp-gitlab" \
-                --env GITLAB_API_URL="https://gitlab.com/api/v4" \
-                --env GITLAB_PERSONAL_ACCESS_TOKEN="$GITLAB_ACCESS_TOKEN" \
-                --env GITLAB_PROJECT_ID="$CI_MERGE_REQUEST_PROJECT_ID"
+      # Debug: Check if required variables are set
+      echo "AUGMENT_SESSION_AUTH is set: ${AUGMENT_SESSION_AUTH:+yes}"
+      echo "GITLAB_PERSONAL_ACCESS_TOKEN is set: ${GITLAB_PERSONAL_ACCESS_TOKEN:+yes}"
+      
+      if [ -z "${AUGMENT_SESSION_AUTH}" ]; then
+        echo "ERROR: AUGMENT_SESSION_AUTH is not set"
+        exit 1
+      fi
+      
+      if [ -z "${GITLAB_PERSONAL_ACCESS_TOKEN}" ]; then
+        echo "ERROR: GITLAB_PERSONAL_ACCESS_TOKEN is not set"
+        exit 1
+      fi
     - |
-      AUGGIE_PROMPT="1. PR title: ${CI_MERGE_REQUEST_TITLE}; PR Description: ${CI_MERGE_REQUEST_DESCRIPTION}
-                2. Get the diff for the PR with Project ID ${CI_MERGE_REQUEST_PROJECT_ID} and Merge Request IID {CI_MERGE_REQUEST_IID} using the tool \`get_merge_request_diffs\`.
-                3. Perform a code review using the title, description and diff from steps 1 & 2.
-                4. Post a comment to the PR from step 2 with the summary (how many suggestions are found), and an individual comment in markdown format for each suggestion found during the code review. Use the tool \`create_merge_request_note\` to post the comments.
-                For steps 2 and 4, use the indicated tools. Do not use \`web-fetch\` to Gitlab."
-    - auggie --model code-review --print "$AUGGIE_PROMPT" > review.md
+      # Add GitLab MCP server for API access
+      auggie mcp add gitlab \
+        --command npx \
+        --args "-y @zereight/mcp-gitlab" \
+        --env GITLAB_PERSONAL_ACCESS_TOKEN="${GITLAB_PERSONAL_ACCESS_TOKEN}" \
+        --env GITLAB_API_URL="${CI_API_V4_URL}"
+    - auggie mcp list
+    - |
+      # Run the code review
+      auggie --print --instruction-file review-prompt.md
   rules:
-    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
-      when: always
+    # Only run on merge request events
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  # Allow the review to fail without blocking the pipeline
+  allow_failure: true
 
