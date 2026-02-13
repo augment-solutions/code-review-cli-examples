@@ -20,6 +20,11 @@ Instructions for each platform are in their respective folders, and include an e
 
 You can use the included [demo_buggy_script.py](./demo_buggy_script.py) to test the code review functionality.
 
+## Limitations
+
+- No metrics/analytics. Customers that need this can use the APIs of the platform to pull data on thumbs up/down or similar.
+- No detection max limit of diff. This can be added but adds complexity to the pipeline. Awaiting Engineering to provide APIs for processing diffs and handling this. TBD.
+
 ## Example PRs with reviews
 
 You can see examples of the Auggie CLI and pipelines in action in the following pull requests. For access to Bitbucket & Azure DevOps, ask Jay.
