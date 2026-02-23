@@ -92,7 +92,7 @@ pipelines:
               - If found, apply those guidelines (skip low-severity ones)
 
               When referencing a custom guideline in your review comments, quote it using the format:
-              `([Guideline](https://bitbucket.org/{workspace}/{repo_slug}/src/{source_branch}/.augment/code_review_guidelines.yaml): <guideline_id>)`
+              `([Guideline](https://bitbucket.org/_WORKSPACE_/_REPO_/src/{source_branch}/.augment/code_review_guidelines.yaml): <guideline_id>)`
 
               ## Step 3: Review Existing Comments
 
