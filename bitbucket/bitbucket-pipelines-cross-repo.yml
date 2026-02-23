@@ -1,0 +1,283 @@
+# Auggie Code Review on PR for Bitbucket
+# Pipeline overview:
+# - Trigger on PRs
+# - Clone repo with depth 1
+# - Validate if required variables are set
+# - Create Auggie prompt file with code review user prompt
+# - Install Auggie
+# - Install Bitbucket MCP server for Auggie for retrieving PR diff, metadata and posting comments
+# - Install Cross-Repo MCP server for Auggie for searching other repositories
+# - Run Auggie in non-interactive mode to perform the code review
+
+image: node:22-alpine
+
+clone:
+  depth: 1
+pipelines:
+  pull-requests:
+    '**': # Runs on all PR branches
+      - step:
+          name: Validate required variables are set
+          script:
+            - |
+              if [ -z "${AUGMENT_SESSION_AUTH:-}" ]; then
+                echo "Error! AUGMENT_SESSION_AUTH is not set!"
+                echo "Set workspace or repository variable 'AUGMENT_SESSION_AUTH' to the value from 'auggie tokens print'"
+                exit 1
+              fi
+              echo "AUGMENT_SESSION_AUTH is configured"
+              
+              if [ -z "${BB_TOKEN:-}" ]; then
+                echo "Error! BB_TOKEN is not set!"
+                echo "Set workspace or repository variable 'BB_TOKEN' to your Bitbucket access token"
+                exit 1
+              fi
+              echo "BB_TOKEN is configured"
+
+              if [ -z "${REMOTE_MCP_TOKEN:-}" ]; then
+                echo "Error! REMOTE_MCP_TOKEN is not set!"
+                echo "Set workspace or repository variable 'REMOTE_MCP_TOKEN' to your Bitbucket access token"
+                exit 1
+              fi
+              echo "REMOTE_MCP_TOKEN is configured"
+      - step:
+          name: Create Auggie prompt file
+          script:
+            - |
+              set -euo pipefail
+              
+              cat << 'EOF' > auggie-prompt.md
+              ---
+              name: "Bitbucket Code Review"
+              description: "Perform a thorough code review on a PR"
+              argument-hint: "[PR number] - Review a pull request (e.g., 123)"
+              model: "code-review"
+              ---
+
+              Analyze pull request: #{pr_number} for this repository.
+
+              ## Step 1: Gather PR Information
+
+              Parse the PR number from the argument. If it is missing or ambiguous, ask for clarification.
+
+              Using the Bitbucket MCP server tools, fetch:
+
+              1. **PR metadata:** Use the `getPullRequest` tool with parameters:
+                - `workspace`: _WORKSPACE_
+                - `repo_slug`: _REPO_
+                - `pull_request_id`: _PR_ID_
+              2. **PR diff:** Use the `getPullRequestDiff` tool with the same parameters as in step 1 to get the full diff.
+                - **Large diffs:** If the diff is truncated, use `getPullRequestDiffStat` to get statistics and run `git diff` locally on the PR branch for complete file contents.
+              3. **PR comments (inline and general):** Use the `getPullRequestComments` tool with:
+                - `workspace`: _WORKSPACE_, `repo_slug`: _REPO_, `pull_request_id`: _PR_ID_
+                - **Pagination:** Use `pagelen` (default 10, max 100) and `page` parameters, or set `all: true` to fetch all comments.
+              4. **PR activity:** Use the `getPullRequestActivity` tool to get the full activity log including approvals, comments, and status changes.
+
+              ### PR Information Summary Format
+
+              After gathering the data, organize it as follows:
+
+              **PR Metadata:**
+              - **Title:** [PR title]
+              - **Author:** [PR author]
+              - **Branch:** [source branch] → [destination branch]
+              - **State:** [OPEN/MERGED/DECLINED/SUPERSEDED]
+              - **Source Commit:** [commit hash from source branch]
+
+              **Proposed Changes:**
+              - **Files changed:** [count]
+              - **Additions:** [+lines] | **Deletions:** [-lines]
+              - **Key Changes:** [Bullet list of the most significant changes, grouped by area/file if helpful]
+
+              **Notable Inline Review Comments:**
+              - Include only high-signal inline comments.
+              - For each, include: file path, line (if present), author, and a 1-sentence paraphrase.
+
+              ## Step 2: Check for Custom Guidelines
+
+              Look for custom code review guidelines in the repository:
+              - Use the `view` tool to check for `.augment/code_review_guidelines.yaml` in the repository
+              - If found, apply those guidelines (skip low-severity ones)
+
+              When referencing a custom guideline in your review comments, quote it using the format:
+              `([Guideline](https://bitbucket.org/_WORKSPACE_/_REPO_/src/{source_branch}/.augment/code_review_guidelines.yaml): <guideline_id>)`
+
+              ## Step 3: Review Existing Comments
+
+              Using the existing comments and reviews fetched in Step 1:
+              - Note any issues already addressed by human reviewers
+              - Avoid posting suggestions that contradict human reviewer feedback
+              - Avoid duplicating existing comments or inline review notes
+
+              ## Step 4: Analyze the Changes
+
+              Generate a concise summary of this pull request that describes what changes were made and why.
+
+              Focus on:
+              - What changes were made
+              - Why the changes were made (if evident from the code/commit messages)
+              - Any important technical details or considerations
+
+              ## Step 5: Cross-Repository Analysis
+
+              Using the `search` tool of the `cross-repo-search` MCP server, search for any dependencies that might be affected by the changes in this PR.
+
+              For example, if an API is changed, look for any repositories that use the API and analyze if changes to the API contract would require the dependent service to be updated.
+              Or if a front-end component is updated or removed, analyze what front-ends could be impacted. Etcetera.
+
+              If any dependencies are found, prepare a separate comment that describes for each dependency that is impacted:
+              - The repository name
+              - The severity level of the impact
+              - Description of the impact
+
+              ## Step 6: Format the Review Summary
+
+              Structure your PR summary comment using this exact format with the HTML marker comment:
+
+              ```markdown
+              ## 🤖 Augment PR Summary
+
+              **Summary:** [One sentence describing the PR]
+
+              **Changes:**
+              - [Key change 1]
+              - [Key change 2]
+              ```
+
+              If a section has no findings, omit it entirely.
+
+              ## Guidelines
+
+              - Be specific: Include file paths, line numbers, and code snippets
+              - Be constructive: Explain *why* something is problematic and suggest fixes
+              - Be thorough but focused: Don't nitpick style if there are real bugs
+              - Consider context: Understand the intent before criticizing the approach
+              - Skip low-severity issues unless they indicate a pattern
+
+              ## Step 7: Post Your Review
+
+              After completing your analysis, post your review with comments to Bitbucket using the MCP tools.
+
+              ### Step 7a: Check for Existing Summary Comment
+
+              First, check if a PR summary comment already exists:
+
+              1. **List existing PR comments:** Use the `getPullRequestComments` tool:
+                - `workspace`: _WORKSPACE_
+                - `repo_slug`: _REPO_
+                - `pull_request_id`: _PR_ID_
+                - `all`: true (to fetch all comments)
+
+              2. **Search for the marker:** Look for a comment containing `## 🤖 Augment PR Summary` in its content.
+
+              3. **If found:** Note the comment `id` to update it in Step 7b.
+
+              ### Step 7b: Post or Update the Summary Comment
+
+              **If an existing summary comment was found (has the marker):**
+              Use the `updatePullRequestComment` tool:
+              - `workspace`: _WORKSPACE_
+              - `repo_slug`: _REPO_
+              - `pull_request_id`: _PR_ID_
+              - `comment_id`: The ID of the existing comment
+              - `content`: The updated summary in markdown format:
+
+              ```markdown
+              ## 🤖 Augment PR Summary
+
+              **Summary:** [Your summary here]
+
+              **Changes:**
+              - [Change 1]
+              - [Change 2]
+
+              ---
+              *🤖 Was this summary useful? React with 👍 or 👎*
+              ```
+
+              **If no existing summary comment exists:**
+              Use the `addPullRequestComment` tool:
+              - `workspace`: _WORKSPACE_
+              - `repo_slug`: _REPO_
+              - `pull_request_id`: _PR_ID_
+              - `content`: The summary in markdown format (same as above)
+
+              ### Step 7c: Post Inline Review Comments
+
+              For each inline comment, use the `addPullRequestComment` tool with the `inline` parameter:
+
+              **General comment (not on a specific line):**
+              - `workspace`: _WORKSPACE_
+              - `repo_slug`: _REPO_
+              - `pull_request_id`: _PR_ID_
+              - `content`: Your comment in markdown format
+
+              **Inline comment on a specific line:**
+              - `workspace`: _WORKSPACE_
+              - `repo_slug`: _REPO_
+              - `pull_request_id`: _PR_ID_
+              - `content`: Your inline comment in markdown format
+              - `inline`: An object specifying the location:
+                ```json
+                {
+                  "path": "path/to/file.ts",
+                  "to": 123
+                }
+                ```
+
+              ### Inline Comment Field Reference
+
+              - `path`: File path relative to repository root
+              - `to`: Line number in the NEW version of the file (for added/modified lines)
+              - `from`: Line number in the OLD version of the file (for deleted lines)
+              - `content`: The comment text in markdown format
+
+              **Examples:**
+              - Comment on new/added line: Use `to` parameter only
+              - Comment on deleted line: Use `from` parameter only
+              - Comment on modified line: Use both `from` and `to` parameters
+
+              ### Common Errors to Avoid
+
+              - **Do NOT** use `web-fetch` to interact with Bitbucket API directly - always use the MCP tools
+              - **Do NOT** use `deletePullRequestComment` unless explicitly requested by the user
+              - **Always** provide the correct `workspace` and `repo_slug` parameters to all tools
+              - **For inline comments**, ensure the `path` matches the file path exactly as shown in the diff
+              EOF
+              
+              # Replace placeholders in prompt with actual values
+              sed -i "s/_WORKSPACE_/${BITBUCKET_WORKSPACE}/g" auggie-prompt.md
+              sed -i "s/_REPO_/${BITBUCKET_REPO_SLUG}/g" auggie-prompt.md
+              sed -i "s/_PR_ID_/${BITBUCKET_PR_ID}/g" auggie-prompt.md
+          artifacts:
+            - auggie-prompt.md
+      - step:
+          name: Run Auggie for Code Review
+          script:
+            - |
+              set -euo pipefail
+              
+              echo "Installing Auggie..."
+              npm install -g @augmentcode/auggie
+              echo "Auggie version:"
+              auggie --version
+
+              # Enable below for debugging
+              # echo "AUGGIE_PROMPT:"
+              # cat auggie-prompt.md
+
+              echo "Adding Bitbucket MCP to Auggie..."
+              auggie mcp add bitbucket \
+                --command npx \
+                --args "-y bitbucket-mcp@latest" \
+                --env BITBUCKET_URL="https://api.bitbucket.org/2.0" \
+                --env BITBUCKET_WORKSPACE=$BITBUCKET_WORKSPACE \
+                --env BITBUCKET_TOKEN=$BB_TOKEN
+              
+              auggie mcp add cross-repo-search \
+                --transport http \
+                --url $REMOTE_MCP_URL \
+                --header "Authorization:Bearer $REMOTE_MCP_TOKEN"
+              
+              echo "Running Auggie..."
+              auggie --model code-review --print --instruction-file auggie-prompt.md
