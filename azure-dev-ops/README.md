@@ -12,7 +12,7 @@ To create one:
 * Navigate to: https://app.augmentcode.com/settings/service-accounts
 * Click the `New service account` button, and enter a name (e.g. Augment Code Review) and an optional description.
 * Click the `Add API token` button, and enter a name (e.g. GitLab).
-* Copy the generated token by clicking the `Copy Token` button. This will be used later when defining the Pipeline Variables in Azure DevOps.
+* Download the JSON by clicking the `JSON` button. This will be used later when defining the Pipeline Variables in Azure DevOps.
 
 *Alternatively, you can use a personal token by running `auggie login` followed by `auggie tokens print` on your local machine.*
 
@@ -40,7 +40,8 @@ This is critical for Auggie to authenticate:
 4. Click **New variable**
 5. Configure the variable:
    * **Name**: `AUGMENT_SESSION_AUTH`  
-   * **Value**: Paste the token you copied from `auggie tokens print`  
+   * **Value**: Paste the entire JSON object you downloaded from the `JSON` button
+     * NOTE: if you are using the personal token method from `auggie tokens print` then copy ONLY the JSON object following `SESSION=`
    * **✓ Keep this value secret** (check this box)
 6. Click **OK** and then **Save**
 
