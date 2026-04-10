@@ -255,4 +255,4 @@ pipelines:
                 --env BITBUCKET_TOKEN=$BB_TOKEN
               
               echo "Running Auggie..."
-              auggie --model code-review --print --instruction-file auggie-prompt.md
+              auggie --persona "augment-code-review-generic" --print --instruction-file auggie-prompt.md
